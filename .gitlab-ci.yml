@@ -1,0 +1,488 @@
+###############################################################################
+##                                                                           ##
+##    Build templates                                                        ##
+##                                                                           ##
+###############################################################################
+
+.build_template: &build_definition
+   script:
+      - export NUM_BUILD_CORES=$(nproc --all)
+      - export
+      - $CXX --version
+      - cmake --version
+      - ccache --version
+      - mpirun --version
+      - export CCACHE_BASEDIR=$CI_PROJECT_DIR
+      - tmpfile=$(mktemp tmp.XXXXXXXXXX.cpp); echo 'int main() {}' > $tmpfile; i=0; result=1; while [ $i -le 30 ]; do [ $i -ne 0 ] && sleep 10 ; $CXX -o /dev/null $tmpfile &> /dev/null; result=$?; [ $result -eq 0 ] && break; echo "Failed to obtain license in try $((i+1)) - retrying in 10 seconds..."; let i=i+1; done; rm -f $tmpfile; [ $result -eq 0 ]
+      - cmake . -LAH -DMPI=$BUILD_WITH_MPI -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -Dpe_PRECISION=$PRECISION -Dpe_CONSTRAINT_SOLVER=$CONSTRAINT_SOLVER -Dpe_COMPLEMENTARITY_SOLVER=$COMPLEMENTARITY_SOLVER -DEXAMPLES=ON
+      - make -j $NUM_BUILD_CORES -l $NUM_BUILD_CORES
+   tags:
+      - docker
+
+
+.build_serial_template: &build_serial_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: ""
+      COMPLEMENTARITY_SOLVER: ""
+      BUILD_WITH_MPI: "OFF"
+      CMAKE_BUILD_TYPE: "RELEASE"
+      PRECISION: "double"
+
+.build_mpionly_template: &build_mpionly_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: ""
+      COMPLEMENTARITY_SOLVER: ""
+      BUILD_WITH_MPI: "ON"
+      CMAKE_BUILD_TYPE: "RELEASE"
+      PRECISION: "double"
+
+.build_serial_dbg_template: &build_serial_dbg_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: ""
+      COMPLEMENTARITY_SOLVER: ""
+      BUILD_WITH_MPI: "OFF"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+.build_mpionly_dbg_template: &build_mpionly_dbg_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: ""
+      COMPLEMENTARITY_SOLVER: ""
+      BUILD_WITH_MPI: "ON"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+.build_mpionly_dbg_ffd_template: &build_mpionly_dbg_ffd_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: "FFDSolver"
+      COMPLEMENTARITY_SOLVER: ""
+      BUILD_WITH_MPI: "ON"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+.build_mpionly_dbg_dem_template: &build_mpionly_dbg_dem_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: "DEMSolver"
+      COMPLEMENTARITY_SOLVER: ""
+      BUILD_WITH_MPI: "ON"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+.build_mpionly_dbg_demobsolete_template: &build_mpionly_dbg_demobsolete_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: "DEMSolverObsolete"
+      COMPLEMENTARITY_SOLVER: ""
+      BUILD_WITH_MPI: "ON"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+.build_serial_dbg_boxfriction_pgs_template: &build_serial_dbg_boxfriction_pgs_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: "BoxFrictionSolver"
+      COMPLEMENTARITY_SOLVER: "PGS"
+      BUILD_WITH_MPI: "OFF"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+.build_serial_dbg_boxfriction_cpg_template: &build_serial_dbg_boxfriction_cpg_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: "BoxFrictionSolver"
+      COMPLEMENTARITY_SOLVER: "CPG"
+      BUILD_WITH_MPI: "OFF"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+.build_serial_dbg_conefriction_pgs_template: &build_serial_dbg_conefriction_pgs_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: "ConeFrictionSolver"
+      COMPLEMENTARITY_SOLVER: "PGS"
+      BUILD_WITH_MPI: "OFF"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+.build_serial_dbg_conefriction_cpg_template: &build_serial_dbg_conefriction_cpg_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: "ConeFrictionSolver"
+      COMPLEMENTARITY_SOLVER: "CPG"
+      BUILD_WITH_MPI: "OFF"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+.build_serial_dbg_frictionless_pgs_template: &build_serial_dbg_frictionless_pgs_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: "FrictionlessSolver"
+      COMPLEMENTARITY_SOLVER: "PGS"
+      BUILD_WITH_MPI: "OFF"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+.build_serial_dbg_frictionless_cpg_template: &build_serial_dbg_frictionless_cpg_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: "FrictionlessSolver"
+      COMPLEMENTARITY_SOLVER: "CPG"
+      BUILD_WITH_MPI: "OFF"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+.build_serial_dbg_polyhedralfrictionsolver_lemke_template: &build_serial_dbg_polyhedralfrictionsolver_lemke_definition
+   <<: *build_definition
+   variables:
+      CONSTRAINT_SOLVER: "PolyhedralFrictionSolver"
+      COMPLEMENTARITY_SOLVER: "Lemke"
+      BUILD_WITH_MPI: "OFF"
+      CMAKE_BUILD_TYPE: "DEBUG"
+      PRECISION: "double"
+
+
+
+
+###############################################################################
+##                                                                           ##
+##    Build jobs                                                             ##
+##                                                                           ##
+###############################################################################
+
+## Intel
+
+intel-15_Serial:
+   <<: *build_serial_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2015
+   only:
+      - triggers
+   tags:
+      - docker
+      - intel
+
+intel-15_MpiOnly:
+   <<: *build_mpionly_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2015
+   only:
+      - triggers
+   tags:
+      - docker
+      - intel
+
+intel-15_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2015
+   only:
+      - triggers
+   tags:
+      - docker
+      - intel
+
+intel-15_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2015
+   only:
+      - triggers
+   tags:
+      - docker
+      - intel
+
+intel-16_Serial:
+   <<: *build_serial_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2016
+   tags:
+      - docker
+      - intel
+
+intel-16_MpiOnly:
+   <<: *build_mpionly_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2016
+   tags:
+      - docker
+      - intel
+
+intel-16_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2016
+   tags:
+      - docker
+      - intel
+
+intel-16_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2016
+   tags:
+      - docker
+      - intel
+
+
+intel-17_Serial:
+   <<: *build_serial_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2017
+   tags:
+      - docker
+      - intel
+
+intel-17_MpiOnly:
+   <<: *build_mpionly_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2017
+   tags:
+      - docker
+      - intel
+
+
+intel-17_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2017
+   tags:
+      - docker
+      - intel
+
+intel-17_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: i10git.cs.fau.de:5005/administration/buildenv-intel:2017
+   tags:
+      - docker
+      - intel
+
+
+## GCC
+
+gcc-4.7_Serial:
+   <<: *build_serial_definition
+   image: walberla/buildenv-ubuntu-gcc:4.7
+   only:
+      - triggers
+
+gcc-4.7_MpiOnly:
+   <<: *build_mpionly_definition
+   image: walberla/buildenv-ubuntu-gcc:4.7
+   only:
+      - triggers
+
+gcc-4.7_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: walberla/buildenv-ubuntu-gcc:4.7
+   only:
+      - triggers
+
+gcc-4.7_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: walberla/buildenv-ubuntu-gcc:4.7
+   only:
+      - triggers
+
+gcc-4.8_Serial:
+   <<: *build_serial_definition
+   image: walberla/buildenv-ubuntu-gcc:4.8
+   only:
+      - triggers
+
+gcc-4.8_MpiOnly:
+   <<: *build_mpionly_definition
+   image: walberla/buildenv-ubuntu-gcc:4.8
+   only:
+      - triggers
+
+gcc-4.8_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: walberla/buildenv-ubuntu-gcc:4.8
+   only:
+      - triggers
+
+gcc-4.8_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: walberla/buildenv-ubuntu-gcc:4.8
+   only:
+      - triggers
+
+gcc-4.9_Serial:
+   <<: *build_serial_definition
+   image: walberla/buildenv-ubuntu-gcc:4.9
+   only:
+      - triggers
+
+gcc-4.9_MpiOnly:
+   <<: *build_mpionly_definition
+   image: walberla/buildenv-ubuntu-gcc:4.9
+   only:
+      - triggers
+
+gcc-4.9_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: walberla/buildenv-ubuntu-gcc:4.9
+   only:
+      - triggers
+
+gcc-4.9_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: walberla/buildenv-ubuntu-gcc:4.9
+   only:
+      - triggers
+
+gcc-5_Serial:
+   <<: *build_serial_definition
+   image: walberla/buildenv-ubuntu-gcc:5
+
+gcc-5_MpiOnly:
+   <<: *build_mpionly_definition
+   image: walberla/buildenv-ubuntu-gcc:5
+
+gcc-5_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: walberla/buildenv-ubuntu-gcc:5
+
+gcc-5_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: walberla/buildenv-ubuntu-gcc:5
+
+
+gcc-6_Serial:
+   <<: *build_serial_definition
+   image: walberla/buildenv-ubuntu-gcc:6
+
+gcc-6_MpiOnly:
+   <<: *build_mpionly_definition
+   image: walberla/buildenv-ubuntu-gcc:6
+
+gcc-6_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: walberla/buildenv-ubuntu-gcc:6
+
+gcc-6_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: walberla/buildenv-ubuntu-gcc:6
+
+
+## Clang
+
+clang-3.4_Serial:
+   <<: *build_serial_definition
+   image: walberla/buildenv-ubuntu-clang:3.4
+   only:
+      - triggers
+
+clang-3.4_MpiOnly:
+   <<: *build_mpionly_definition
+   image: walberla/buildenv-ubuntu-clang:3.4
+   only:
+      - triggers
+
+clang-3.4_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: walberla/buildenv-ubuntu-clang:3.4
+   only:
+      - triggers
+
+clang-3.4_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: walberla/buildenv-ubuntu-clang:3.4
+
+
+clang-3.5_Serial:
+   <<: *build_serial_definition
+   image: walberla/buildenv-ubuntu-clang:3.5
+   only:
+      - triggers
+
+clang-3.5_MpiOnly:
+   <<: *build_mpionly_definition
+   image: walberla/buildenv-ubuntu-clang:3.5
+   only:
+      - triggers
+
+clang-3.5_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: walberla/buildenv-ubuntu-clang:3.5
+   only:
+      - triggers
+
+clang-3.5_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: walberla/buildenv-ubuntu-clang:3.5
+   only:
+      - triggers
+
+
+clang-3.6_Serial:
+   <<: *build_serial_definition
+   image: walberla/buildenv-ubuntu-clang:3.6
+   only:
+      - triggers
+
+clang-3.6_MpiOnly:
+   <<: *build_mpionly_definition
+   image: walberla/buildenv-ubuntu-clang:3.6
+   only:
+      - triggers
+
+clang-3.6_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: walberla/buildenv-ubuntu-clang:3.6
+   only:
+      - triggers
+
+clang-3.6_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: walberla/buildenv-ubuntu-clang:3.6
+   only:
+      - triggers
+
+
+clang-3.7_Serial:
+   <<: *build_serial_definition
+   image: walberla/buildenv-ubuntu-clang:3.7
+   only:
+      - triggers
+
+clang-3.7_MpiOnly:
+   <<: *build_mpionly_definition
+   image: walberla/buildenv-ubuntu-clang:3.7
+   only:
+      - triggers
+
+clang-3.7_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: walberla/buildenv-ubuntu-clang:3.7
+   only:
+      - triggers
+
+clang-3.7_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: walberla/buildenv-ubuntu-clang:3.7
+   only:
+      - triggers
+
+clang-3.8_Serial:
+   <<: *build_serial_definition
+   image: walberla/buildenv-ubuntu-clang:3.8
+
+clang-3.8_MpiOnly:
+   <<: *build_mpionly_definition
+   image: walberla/buildenv-ubuntu-clang:3.8
+
+clang-3.8_Serial_Dbg:
+   <<: *build_serial_dbg_definition
+   image: walberla/buildenv-ubuntu-clang:3.8
+
+clang-3.8_MpiOnly_Dbg:
+   <<: *build_mpionly_dbg_definition
+   image: walberla/buildenv-ubuntu-clang:3.8
+
+clang-3.8_MpiOnly_Dbg_Ffd:
+   <<: *build_mpionly_dbg_ffd_definition
+   image: walberla/buildenv-ubuntu-clang:3.8
+
+clang-3.8_MpiOnly_Dbg_Dem:
+   <<: *build_mpionly_dbg_dem_definition
+   image: walberla/buildenv-ubuntu-clang:3.8
+
+clang-3.8_MpiOnly_Dbg_DemObsolete:
+   <<: *build_mpionly_dbg_demobsolete_definition
+   image: walberla/buildenv-ubuntu-clang:3.8

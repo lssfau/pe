@@ -1,0 +1,11 @@
+The pe is published under the GNU General Public License version 3 as stated
+in detail in the file COPYING. The following files contain code that was added
+to the pe project without being covered by a contributor agreement:
+
+  * src/util/ConvexHull.cpp
+  * pe/core/detection/fine/EPA.h
+  * src/core/GeomTools.cpp
+
+These files have to be taken into special account when relicensing the
+pe source code and may contain additional license terms in accordance
+with section 7 of the GPL version 3.

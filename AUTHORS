@@ -1,0 +1,42 @@
+                AUTHORS OF THE PE PHYSICS ENGINE
+                ================================
+
+Active Developers
+=================
+
+Tobias Preclik <tobias.preclik@informatik.uni-erlangen.de>
+   * Lead programmer
+   * Author of the hard contact solver library
+
+Kristina Pickl <kristina.pickl@informatik.uni-erlangen.de>
+   * Lead programmer
+
+
+Former Developers
+=================
+
+Klaus Iglberger <klaus.iglberger@informatik.uni-erlangen.de>
+   * Project initiator
+   * Lead programmer
+
+
+Contributors
+============
+
+Frank Deserno
+   * Author of the cmake build system
+
+Hannes Wengenroth
+   * Serial version of the fast frictional dynamics algorithm
+
+Florian Schornbaum
+   * Author of the hierarchical hash grids coarse collision detection algorithm
+
+Martin Ketzer
+   * Author of the box and capsule geometric primitives
+
+Michael Sünkel
+   * Author of the cylinder geometric primitive
+
+Dominik Geuss
+   * Derivation of the force and torque calculations of the Link class

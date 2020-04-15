@@ -1,0 +1,1699 @@
+#!/bin/bash
+
+#==================================================================================================
+#
+#  Configuration script for the pe physics engine
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+set -e
+
+
+#######################################
+# Global definitions
+
+warning() {
+	echo -ne '\e[1;33mWARNING:\e[0m '
+	echo $1
+}
+
+error() {
+	echo -ne '\e[1;31mERROR:\e[0m '
+	echo $1
+	exit 1
+}
+
+
+
+#######################################
+# Parsing the command line arguments
+
+# Checking the number of command line arguments
+if [ $# -ge 2 ]; then
+   error "Invalid use of the pe configuration script. Type './configure -h' to display the help."
+fi
+
+# Printing the help
+if test "$1" = "--help" || test "$1" = "-help" || test "$1" = "-h"; then
+   echo
+   echo "Usage: ./configure [<config_file>]"
+   echo
+   echo "Configuration of the compilation process of the pe physics engine. The system-specific"
+   echo "settings are specified via the given configuration file <config_file>. In case no"
+   echo "<config_file> is specified, the settings of the default 'ConfigFile' are used."
+   echo
+   echo "Options:"
+   echo " -h, -help, --help  Displays this information"
+   echo
+   exit 0
+fi
+
+
+#####################################
+# Selecting the configuration file
+
+CONFIGFILE="ConfigFile"
+
+if [ $# = 1 ]; then
+   if [ ! -f "$1" ]; then
+      error "Config file '$1' cannot be found."
+   else
+      CONFIGFILE="$1"
+   fi
+fi
+
+source $CONFIGFILE
+
+
+##########################
+# Checking the settings
+
+# Checking the version settings
+if test "$VERSION" != "debug" && test "$VERSION" != "release"; then
+   error "Invalid version settings. Possible options are 'debug' and 'release'."
+fi
+
+# Checking the library settings
+if test "$LIBRARY" != "static" && test "$LIBRARY" != "shared" && test "$LIBRARY" != "both"; then
+   error "Invalid library settings. Possible options are 'static', 'shared' and 'both'."
+fi
+
+# Checking the compiler settings
+if test "$COMPILER" != "gcc" && test "$COMPILER" != "intel" && test "$COMPILER" != "clang"; then
+   error "Unknown compiler selected. Choose either 'gcc', 'intel' or 'clang'."
+fi
+
+# Checking the settings for the BLAS module
+if test "$BLAS" != "yes" && test "$BLAS" != "no"; then
+   error "Invalid setting for the BLAS module."
+fi
+
+# Checking the settings for the Irrlicht module
+if test "$IRRLICHT" != "yes" && test "$IRRLICHT" != "no"; then
+   error "Invalid setting for the Irrlicht module."
+fi
+
+# Checking the settings for the MPI module
+if test "$MPI" != "yes" && test "$MPI" != "no"; then
+   error "Invalid setting for the MPI module. "
+fi
+
+# Checking the settings for the OpenCL module
+if test "$OPENCL" != "yes" && test "$OPENCL" != "no"; then
+   error "Invalid setting for the OpenCL module. "
+fi
+
+# Checking the settings for the build directory
+if [ ! -d $BUILD_DIRECTORY ]; then
+   error "Build directory $BUILD_DIRECTORY does not exist."
+fi
+
+
+#######################################
+# Preparing the build directory
+
+SOURCE_DIRECTORY=$(readlink -f $(dirname $0))
+
+if ! test $BUILD_DIRECTORY; then
+   # Set default
+   BUILD_DIRECTORY=$(readlink -f .)
+else
+   # Normalize path
+   BUILD_DIRECTORY=$(readlink -f $BUILD_DIRECTORY)
+fi
+
+echo "Source directory: $SOURCE_DIRECTORY"
+echo "Build directory:  $BUILD_DIRECTORY"
+
+OBJECT_DIRECTORY=$BUILD_DIRECTORY/obj
+LIBRARY_DIRECTORY=$BUILD_DIRECTORY/lib
+DOC_DIRECTORY=$BUILD_DIRECTORY/doc
+CONFIG_HEADER=$BUILD_DIRECTORY/config.h
+
+rm -f $CONFIG_HEADER
+rm -rf $OBJECT_DIRECTORY $LIBRARY_DIRECTORY
+mkdir -p $OBJECT_DIRECTORY $LIBRARY_DIRECTORY $DOC_DIRECTORY
+
+
+#############################
+# Engine specific settings
+
+STATIC_PE_LIB="libpe.a"
+SHARED_PE_LIB="libpe.so"
+
+PACKAGE_NAME="pe"
+PACKAGE_VERSION="trunk"
+
+
+############################
+# Generating the Makefile
+
+CPPFLAGS="$PREPROCESSOR_FLAGS"
+CXXFLAGS="-Wall -Werror -Wshadow -Woverloaded-virtual -ansi -O3 $COMPILER_FLAGS"
+PE_CPPFLAGS=""
+PE_CXXFLAGS=""
+
+if test $COMPILER = "gcc"; then
+   CXX="g++"
+   CXXFLAGS="$CXXFLAGS -Wextra -Wno-unused-local-typedefs --param inline-unit-growth=150 --param max-inline-insns-single=500 --param large-function-growth=600"
+fi
+if test $COMPILER = "intel"; then
+   CXX="icpc"
+   CXXFLAGS="$CXXFLAGS"
+fi
+if test $COMPILER = "clang"; then
+   CXX="clang++"
+   CXXFLAGS="$CXXFLAGS"
+fi
+if test $VERSION = "debug"; then
+   CXXFLAGS="$CXXFLAGS -g"
+else
+   CXXFLAGS="$CXXFLAGS -DNDEBUG"
+   DEFINES="$DEFINES NDEBUG"
+fi
+if test $LIBRARY = "shared" || test $LIBRARY = "both"; then
+   warning "Shared library builds are currently experimental."
+
+   PE_CXXFLAGS="$PE_CXXFLAGS -fPIC -fvisibility=hidden -fvisibility-inlines-hidden"
+   PE_CPPFLAGS="$PE_CPPFLAGS -DPE_SHARED_LIB_SELECT_EXPORTS"
+
+   echo "#define PE_SHARED_LIB_BUILD 1" >> $CONFIG_HEADER
+   echo "" >> $CONFIG_HEADER
+
+   DEFINES="$DEFINES PE_SHARED_LIB_BUILD=1"
+fi
+
+CPPFLAGS="$CPPFLAGS -include $CONFIG_HEADER -I$SOURCE_DIRECTORY"
+
+if test $BOOST_INCLUDE_PATH; then
+   CPPFLAGS="$CPPFLAGS -isystem $BOOST_INCLUDE_PATH"
+fi
+if test $BLAS = "yes"; then
+   if test $BLAS_INCLUDE_PATH; then
+      CPPFLAGS="$CPPFLAGS -isystem $BLAS_INCLUDE_PATH"
+   fi
+fi
+
+if test $IRRLICHT = "yes"; then
+   if test $IRRLICHT_INCLUDE_PATH; then
+      CPPFLAGS="$CPPFLAGS -isystem $IRRLICHT_INCLUDE_PATH"
+   fi
+
+   MEDIA_PATH=$SOURCE_DIRECTORY/media
+fi
+
+echo "#define PE_MEDIA_PATH $MEDIA_PATH" >> $CONFIG_HEADER
+echo "" >> $CONFIG_HEADER
+
+DEFINES="$DEFINES PE_MEDIA_PATH=$MEDIA_PATH"
+
+if test $MPI = "yes"; then
+   if test $MPI_INCLUDE_PATH; then
+      CPPFLAGS="$CPPFLAGS -isystem $MPI_INCLUDE_PATH"
+   fi
+fi
+
+if test $OPENCL = "yes"; then
+   if test $OPENCL_INCLUDE_PATH; then
+      CPPFLAGS="$CPPFLAGS -isystem $OPENCL_INCLUDE_PATH"
+   fi
+   if test $GPUSOLVE_INCLUDE_PATH; then
+      CPPFLAGS="$CPPFLAGS -isystem $GPUSOLVE_INCLUDE_PATH"
+   fi
+
+   OPENCL_KERNEL_PATH=$SOURCE_DIRECTORY/src/core/opencl
+fi
+
+echo "#define PE_OPENCL_KERNEL_PATH $OPENCL_KERNEL_PATH" >> $CONFIG_HEADER
+echo "" >> $CONFIG_HEADER
+
+DEFINES="$DEFINES PE_OPENCL_KERNEL_PATH=$OPENCL_KERNEL_PATH"
+
+
+cat >> $CONFIG_HEADER <<EOF
+// Generic helper definitions for shared library support
+#if defined _WIN32 || defined __CYGWIN__
+  #define PE_SHARED_LIB_IMPORT __declspec(dllimport)
+  #define PE_SHARED_LIB_EXPORT __declspec(dllexport)
+  #define PE_SHARED_LIB_LOCAL
+#else
+  #if __GNUC__ >= 4
+    #define PE_SHARED_LIB_IMPORT __attribute__ ((visibility ("default")))
+    #define PE_SHARED_LIB_EXPORT __attribute__ ((visibility ("default")))
+    #define PE_SHARED_LIB_LOCAL  __attribute__ ((visibility ("hidden")))
+  #else
+    #define PE_SHARED_LIB_IMPORT
+    #define PE_SHARED_LIB_EXPORT
+    #define PE_SHARED_LIB_LOCAL
+  #endif
+#endif
+
+// Now we use the generic helper definitions above to define PE_PUBLIC, PE_PROTECTED
+// and PE_PRIVATE. PE_PUBLIC is for symbols part of the public application programming
+// interface (API), PE_PROTECTED is for symbols used e.g. by public templated or
+// inlined code. These symbols must also be publicly available when compiling the
+// application. PE_PRIVATE are symbols for internal use inside the library only.
+
+#ifdef PE_SHARED_LIB_BUILD
+   // defined if PE is compiled as a shared library
+   #ifdef PE_SHARED_LIB_SELECT_EXPORTS
+      // defined if we are building the PE SHARED_LIB (instead of using it)
+      #define PE_PUBLIC PE_SHARED_LIB_EXPORT
+   #else
+      #define PE_PUBLIC PE_SHARED_LIB_IMPORT
+   #endif
+   #define PE_PRIVATE PE_SHARED_LIB_LOCAL
+#else
+   // PE_SHARED_LIB is not defined: this means PE is a static library
+   #define PE_PUBLIC
+   #define PE_PRIVATE
+#endif
+#define PE_PROTECTED PE_PUBLIC
+
+#define PE_NOTHROW
+
+EOF
+
+DEFINES="$DEFINES PE_PUBLIC= PE_PRIVATE= PE_PROTECTED= PE_NOTHROW="
+
+if test $BLAS = "yes"; then
+   echo "#define HAVE_BLAS 1" >> $CONFIG_HEADER
+
+   DEFINES="$DEFINES HAVE_BLAS=1"
+else
+   echo "#define HAVE_BLAS 0" >> $CONFIG_HEADER
+
+   DEFINES="$DEFINES HAVE_BLAS=0"
+fi
+
+if test $IRRLICHT = "yes"; then
+   echo "#define HAVE_IRRLICHT 1" >> $CONFIG_HEADER
+
+   DEFINES="$DEFINES HAVE_IRRLICHT=1"
+else
+   echo "#define HAVE_IRRLICHT 0" >> $CONFIG_HEADER
+
+   DEFINES="$DEFINES HAVE_IRRLICHT=0"
+fi
+
+if test "$MPI" = "yes"; then
+   echo "#define HAVE_MPI 1" >> $CONFIG_HEADER
+
+   DEFINES="$DEFINES HAVE_MPI=1"
+
+   if test "$MPI_PREINCLUDE" = "yes"; then
+      echo "#include <mpi.h>" >> $CONFIG_HEADER
+   elif test "$MPI_PREINCLUDE" != "no" && test "$MPI_PREINCLUDE" != ""; then
+      warning "MPI_PREINCLUDE has invalid setting."
+   fi
+else
+   echo "#define HAVE_MPI 0" >> $CONFIG_HEADER
+
+   DEFINES="$DEFINES HAVE_MPI=0"
+fi
+
+if test $OPENCL = "yes"; then
+   echo "#define HAVE_OPENCL 1" >> $CONFIG_HEADER
+
+   DEFINES="$DEFINES HAVE_OPENCL=1"
+else
+   echo "#define HAVE_OPENCL 0" >> $CONFIG_HEADER
+
+   DEFINES="$DEFINES HAVE_OPENCL=0"
+fi
+
+cat > $BUILD_DIRECTORY/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the pe physics engine
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#                2014 Tobias Preclik
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# The object and library paths
+SOURCE_PATH  = $SOURCE_DIRECTORY
+BUILD_PATH   = $BUILD_DIRECTORY
+
+
+# Compiler configuration
+CPP      = cpp
+CPPFLAGS = $CPPFLAGS $PE_CPPFLAGS
+CXX      = $CXX
+CXXFLAGS = $CXXFLAGS $PE_CXXFLAGS
+
+
+# Setting the source, object and dependency files
+SRC = \$(shell find \$(SOURCE_PATH)/src -name '*.cpp')
+OBJ = \$(patsubst \$(SOURCE_PATH)/src/%.cpp,\$(BUILD_PATH)/obj/%.o,\$(SRC))
+DEP = \$(patsubst \$(SOURCE_PATH)/src/%.cpp,\$(BUILD_PATH)/obj/%.d,\$(SRC))
+
+
+# Reflect directories of source tree in build tree
+\$(shell mkdir -p \$(patsubst \$(SOURCE_PATH)/src/%,\$(BUILD_PATH)/obj/%,\$(shell find \$(SOURCE_PATH)/src -type d)) \$(BUILD_PATH)/lib)
+
+EOF
+
+if test $LIBRARY = "static"; then
+   echo "all: \$(BUILD_PATH)/lib/$STATIC_PE_LIB" >> $BUILD_DIRECTORY/Makefile
+fi
+if test $LIBRARY = "shared"; then
+   echo "all: \$(BUILD_PATH)/lib/$SHARED_PE_LIB" >> $BUILD_DIRECTORY/Makefile
+fi
+if test $LIBRARY = "both"; then
+   echo "all: \$(BUILD_PATH)/lib/$STATIC_PE_LIB \$(BUILD_PATH)/lib/$SHARED_PE_LIB" >> $BUILD_DIRECTORY/Makefile
+fi
+
+cat >> $BUILD_DIRECTORY/Makefile <<EOF
+
+\$(BUILD_PATH)/lib/$STATIC_PE_LIB: \$(OBJ)
+	@\$(RM) \$@
+	ar crus \$@ \$^
+
+\$(BUILD_PATH)/lib/$SHARED_PE_LIB: \$(OBJ)
+	\$(CXX) \$(CXXFLAGS) -shared -o \$@ \$^
+
+distclean: docclean
+	\$(RM) \$(BUILD_PATH)/config.h \$(BUILD_PATH)/Makefile \$(BUILD_PATH)/doc/Doxyfile.inject
+	\$(RM) -r \$(BUILD_PATH)/obj \$(BUILD_PATH)/lib
+	rmdir --ignore-fail-on-non-empty \$(BUILD_PATH)/doc
+
+clean: mostlyclean
+	\$(RM) \$(BUILD_PATH)/lib/$STATIC_PE_LIB \$(BUILD_PATH)/lib/$SHARED_PE_LIB
+
+mostlyclean:
+	\$(RM) -r \$(BUILD_PATH)/obj/*
+
+doc:
+	@cd \$(BUILD_PATH)/doc; doxygen \$(SOURCE_PATH)/doc/Doxyfile
+
+docclean:
+	\$(RM) -r \$(BUILD_PATH)/doc/html/ \$(BUILD_PATH)/doc/latex/
+
+dist:
+	@set -e ; \\
+	tmp=\$\$(mktemp -d)/$PACKAGE_NAME-$PACKAGE_VERSION ; \\
+	mkdir -p \$\$(find \$(SOURCE_PATH)/src \$(SOURCE_PATH)/pe \$(SOURCE_PATH)/doc \$(SOURCE_PATH)/tutorial -type d -print | sed "s|^\$(SOURCE_PATH)|\$\$tmp|") ; \\
+	for i in \$\$(find \$(SOURCE_PATH)/src -name '*.cpp' -o -name '*.cl') ; \\
+	do \\
+	   cp \$\$i \$\$(echo \$\$i | sed "s|^\$(SOURCE_PATH)|\$\$tmp|") ; \\
+	done ; \\
+	for i in \$\$(find \$(SOURCE_PATH)/pe \$(SOURCE_PATH)/tutorial -name '*.h') ; \\
+	do \\
+	   cp \$\$i \$\$(echo \$\$i | sed "s|^\$(SOURCE_PATH)|\$\$tmp|") ; \\
+	done ; \\
+	cp -r \$(SOURCE_PATH)/cmake \$\$tmp/ ; \\
+	cp -r \$(SOURCE_PATH)/media \$\$tmp/ ; \\
+	cp -r \$(SOURCE_PATH)/examples \$\$tmp/ ; \\
+	cp -r \$(SOURCE_PATH)/doc/Doxyfile \$(SOURCE_PATH)/doc/pe.sty \$(SOURCE_PATH)/doc/pics \$\$tmp/doc/ ; \\
+	cp configure AUTHORS CMakeLists.txt COPYING ConfigFile LICENSES README \$\$tmp/ ; \\
+	tar -cjf $PACKAGE_NAME-$PACKAGE_VERSION.tar.bz2 -C \$\$tmp/.. $PACKAGE_NAME-$PACKAGE_VERSION ; \\
+	rm -rf \$\$tmp
+
+ifneq (\$(MAKECMDGOALS),distclean)
+ifneq (\$(MAKECMDGOALS),clean)
+ifneq (\$(MAKECMDGOALS),mostlyclean)
+ifneq (\$(MAKECMDGOALS),doc)
+ifneq (\$(MAKECMDGOALS),docclean)
+ifneq (\$(MAKECMDGOALS),dist)
+ifeq (\$(origin MAKE_RESTARTS), undefined)
+\$(info Building dependencies...)
+endif
+-include \$(DEP)
+endif
+endif
+endif
+endif
+endif
+endif
+
+
+# Rules
+\$(BUILD_PATH)/obj/%.o: \$(SOURCE_PATH)/src/%.cpp
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) -c \$< -o \$@
+
+\$(BUILD_PATH)/obj/%.d: \$(SOURCE_PATH)/src/%.cpp
+	@\$(CPP) \$(CPPFLAGS) -MM -MP -MT "\$(BUILD_PATH)/obj/\$*.o \$(BUILD_PATH)/obj/\$*.d" -MF \$@ \$<
+
+
+.PHONY: all distclean clean mostlyclean doc docclean dist
+EOF
+
+
+##########################
+# Example configuration
+
+EXAMPLE_CXXFLAGS="$CXXFLAGS"
+EXAMPLE_CPPFLAGS="$CPPFLAGS -I$SOURCE_DIRECTORY"
+EXAMPLE_LDFLAGS="$LINKER_FLAGS -L$LIBRARY_DIRECTORY"
+EXAMPLE_VPATH="$LIBRARY_DIRECTORY"
+EXAMPLE_LIBS="-lm -lrt -lpe"
+if test $BOOST_LIBRARY_PATH; then
+   EXAMPLE_LDFLAGS="$EXAMPLE_LDFLAGS -L$BOOST_LIBRARY_PATH"
+   EXAMPLE_VPATH="$EXAMPLE_VPATH:$BOOST_LIBRARY_PATH"
+fi
+if test $BOOST_THREAD_LIBRARY; then
+   EXAMPLE_LIBS="$EXAMPLE_LIBS -l$BOOST_THREAD_LIBRARY"
+else
+   EXAMPLE_LIBS="$EXAMPLE_LIBS -lboost_thread"
+fi
+if test $BOOST_SYSTEM_LIBRARY; then
+   EXAMPLE_LIBS="$EXAMPLE_LIBS -l$BOOST_SYSTEM_LIBRARY"
+else
+   EXAMPLE_LIBS="$EXAMPLE_LIBS -lboost_system"
+fi
+if test $BOOST_FILESYSTEM_LIBRARY; then
+   EXAMPLE_LIBS="$EXAMPLE_LIBS -l$BOOST_FILESYSTEM_LIBRARY"
+else
+   EXAMPLE_LIBS="$EXAMPLE_LIBS -lboost_filesystem"
+fi
+if test $BOOST_PROGRAM_OPTIONS_LIBRARY; then
+   EXAMPLE_LIBS="$EXAMPLE_LIBS -l$BOOST_PROGRAM_OPTIONS_LIBRARY"
+else
+   EXAMPLE_LIBS="$EXAMPLE_LIBS -lboost_program_options"
+fi
+if test $BLAS = "yes"; then
+   if test $BLAS_LIBRARY_PATH; then
+      EXAMPLE_LDFLAGS="$EXAMPLE_LDFLAGS -L$BLAS_LIBRARY_PATH"
+      EXAMPLE_VPATH="$EXAMPLE_VPATH:$BLAS_LIBRARY_PATH"
+   fi
+   if test "$BLAS_LIBRARIES"; then
+      for ARG in $BLAS_LIBRARIES
+      do
+         EXAMPLE_LIBS="$EXAMPLE_LIBS -l$ARG"
+      done
+   fi
+fi
+if test $IRRLICHT = "yes"; then
+   if test $IRRLICHT_LIBRARY_PATH; then
+      EXAMPLE_LDFLAGS="$EXAMPLE_LDFLAGS -L$IRRLICHT_LIBRARY_PATH"
+      EXAMPLE_VPATH="$EXAMPLE_VPATH:$IRRLICHT_LIBRARY_PATH"
+   fi
+   if test $IRRLICHT_LIBRARY; then
+      EXAMPLE_LIBS="$EXAMPLE_LIBS -l$IRRLICHT_LIBRARY"
+   else
+      EXAMPLE_LIBS="$EXAMPLE_LIBS -lIrrlicht"
+   fi
+   EXAMPLE_LIBS="$EXAMPLE_LIBS -lGLU -lXxf86vm -lXext -lX11 -lpng -ljpeg"
+fi
+if test $MPI = "yes"; then
+   if test $MPI_LIBRARY_PATH; then
+      EXAMPLE_LDFLAGS="$EXAMPLE_LDFLAGS -L$MPI_LIBRARY_PATH"
+      EXAMPLE_VPATH="$EXAMPLE_VPATH:$MPI_LIBRARY_PATH"
+   fi
+   if test "$MPI_LIBRARY"; then
+      for lib in $MPI_LIBRARY
+      do
+         EXAMPLE_LIBS="$EXAMPLE_LIBS -l$lib"
+      done
+   else
+      warning "No MPI library specified."
+   fi
+fi
+if test $OPENCL = "yes"; then
+   # OpenCL
+   if test $OPENCL_LIBRARY_PATH; then
+      EXAMPLE_LDFLAGS="$EXAMPLE_LDFLAGS -L$OPENCL_LIBRARY_PATH"
+      EXAMPLE_VPATH="$EXAMPLE_VPATH:$OPENCL_LIBRARY_PATH"
+   fi
+   if test $OPENCL_LIBRARY; then
+      EXAMPLE_LIBS="$EXAMPLE_LIBS -l$OPENCL_LIBRARY"
+   else
+      EXAMPLE_LIBS="$EXAMPLE_LIBS -lOpenCL"
+   fi
+
+   # GPUsolve
+   if test $GPUSOLVE_LIBRARY_PATH; then
+      EXAMPLE_LDFLAGS="$EXAMPLE_LDFLAGS -L$GPUSOLVE_LIBRARY_PATH"
+      EXAMPLE_VPATH="$EXAMPLE_VPATH:$GPUSOLVE_LIBRARY_PATH"
+   fi
+   if test $GPUSOLVE_LIBRARY; then
+      EXAMPLE_LIBS="$EXAMPLE_LIBS -l$GPUSOLVE_LIBRARY"
+   else
+      EXAMPLE_LIBS="$EXAMPLE_LIBS -lGPUsolve"
+   fi
+   EXAMPLE_LIBS="$EXAMPLE_LIBS -lboost_regex"
+fi
+
+######################################################
+# Generating the Makefile for the box stack example
+
+cat > ./examples/boxstack/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the box stack example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+boxstack: BoxStack.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ BoxStack.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f boxstack
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+##################################################
+# Generating the Makefile for the chain example
+
+cat > ./examples/chain/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the chain example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+chain: Chain.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ Chain.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f chain
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+############################################################
+# Generating the Makefile for the Newton's cradle example
+
+cat > ./examples/cradle/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the Newton's cradle example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+cradle: Cradle.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ Cradle.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f cradle
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+###################################################
+# Generating the Makefile for the domino example
+
+cat > ./examples/domino/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the domino example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+domino: Domino.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ Domino.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f domino
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+#####################################################
+# Generating the Makefile for the granular example
+
+cat > ./examples/granular/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the granular media example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+granular: Granular.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ Granular.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f granular
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+#################################################
+# Generating the Makefile for the nano example
+
+cat > ./examples/nano/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the nano example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+nano: Nano.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ Nano.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f nano
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+#################################################
+# Generating the Makefile for the well example
+
+cat > ./examples/well/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the well example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+well: Well.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ Well.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f well
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+####################################################
+# Generating the Makefile for the mpichannel example
+
+cat > ./examples/mpichannel/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpichannel example
+#
+#  Copyright (C) 2014 Tobias Preclik
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpichannel: MPIChannel.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPIChannel.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpichannel
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+####################################################
+# Generating the Makefile for the mpicube example
+
+cat > ./examples/mpicube/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpicube example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpicube: MPICube.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPICube.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpicube
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+########################################################
+# Generating the Makefile for the mpigranular example
+
+cat > ./examples/mpigranular/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpigranular example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpigranular: MPIGranular.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPIGranular.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpigranular
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+#########################################################
+# Generating the Makefile for the mpihourglass example
+
+cat > ./examples/mpihourglass/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpihourglass example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpihourglass: MPIHourglass.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPIHourglass.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpihourglass
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+#########################################################
+# Generating the Makefile for the mpiimpact example
+
+cat > ./examples/mpiimpact/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpiimpact example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpiimpact: MPIImpact.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPIImpact.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpiimpact
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+#########################################################
+# Generating the Makefile for the mpibrazil example
+
+cat > ./examples/mpibrazil/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpibrazil example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpibrazil: MPIBrazil.cpp chull.o \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPIBrazil.cpp chull.o \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpibrazil chull.o
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+#########################################################
+# Generating the Makefile for the mpilabyrinth example
+
+cat > ./examples/mpilabyrinth/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpilabyrinth example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpilabyrinth: MPILabyrinth.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPILabyrinth.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpilabyrinth
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+####################################################
+# Generating the Makefile for the mpilattice example
+
+cat > ./examples/mpilattice/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpilattice example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpilattice: MPILattice.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPILattice.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpilattice
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+###################################################
+# Generating the Makefile for the mpilss example
+
+cat > ./examples/mpilss/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpilss example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpilss: MPILSS.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPILSS.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpilss
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+####################################################
+# Generating the Makefile for the mpinano example
+
+cat > ./examples/mpinano/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpinano example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpinano: MPINano.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPINano.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpinano
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+#####################################################
+# Generating the Makefile for the mpistair example
+
+cat > ./examples/mpistair/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpistair example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpistair: MPIStair.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPIStair.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpistair
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+####################################################
+# Generating the Makefile for the mpiwell example
+
+cat > ./examples/mpiwell/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the mpiwell example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+mpiwell: MPIWell.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ MPIWell.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f mpiwell
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+####################################################
+# Generating the Makefile for the shaker example
+
+cat > ./examples/shaker/Makefile <<EOF
+#==================================================================================================
+#
+#  Makefile for the shaker example
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+
+# Compiler configuration
+CXX      = $CXX
+CXXFLAGS = $EXAMPLE_CXXFLAGS
+CPPFLAGS = $EXAMPLE_CPPFLAGS
+
+# Compiler environment
+LDFLAGS = $EXAMPLE_LDFLAGS
+LIBS    = $EXAMPLE_LIBS
+
+# Library search path
+vpath lib%.a $EXAMPLE_VPATH
+vpath lib%.so $EXAMPLE_VPATH
+
+
+# Build rules
+shaker: Shaker.cpp \$(LIBS)
+	\$(CXX) \$(CPPFLAGS) \$(CXXFLAGS) \$(LDFLAGS) -o \$@ Shaker.cpp \$(LIBS)
+
+
+# Clean up rules
+clean:
+	@echo "Cleaning up..."
+	rm -f shaker
+
+
+# ----- Setting the independent commands -----
+.PHONY: clean
+EOF
+
+
+###########################################
+# Generating the Doxyfile injection file
+
+cat > $DOC_DIRECTORY/Doxyfile.inject <<EOF
+PROJECT_NAME     = $PACKAGE_NAME
+PROJECT_NUMBER   = $PACKAGE_VERSION
+OUTPUT_DIRECTORY = $DOC_DIRECTORY
+INPUT            = $SOURCE_DIRECTORY/pe $SOURCE_DIRECTORY/src $SOURCE_DIRECTORY/tutorial
+IMAGE_PATH       = $SOURCE_DIRECTORY/doc/pics/jpg $SOURCE_DIRECTORY/doc/pics/png $SOURCE_DIRECTORY/doc/pics/eps
+EXTRA_PACKAGES   = $SOURCE_DIRECTORY/doc/pe
+PREDEFINED       = $DEFINES
+EOF

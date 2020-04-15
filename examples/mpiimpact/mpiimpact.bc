@@ -1,0 +1,10 @@
+granular_nz=24
+granular_dist=2.1*0.25
+granular_nx=8*6
+granular_ny=8*4
+lx=granular_nx*granular_dist
+ly=granular_ny*granular_dist
+granular_volume=4/3*0.25^3*pi
+granular_dense_height=granular_nx*granular_ny*granular_nz*granular_volume/(lx*ly*0.64)
+gravity=0.00981
+granular_freefall=sqrt(2*(granular_nz*granular_dist-granular_dense_height)/gravity)

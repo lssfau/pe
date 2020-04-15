@@ -1,0 +1,142 @@
+#==================================================================================================
+#
+#  ConfigFile file for the pe physics engine configuration
+#
+#  Copyright (C) 2009 Klaus Iglberger
+#                2012 Tobias Preclik
+#
+#  This file is part of pe.
+#
+#  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+#  General Public License as published by the Free Software Foundation, either version 3 of the
+#  License, or (at your option) any later version.
+#
+#  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+#  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License along with pe. If not,
+#  see <http://www.gnu.org/licenses/>.
+#
+#==================================================================================================
+
+# Version of the pe engine:
+#   debug  : Debug version
+#   release: Release version (default)
+VERSION="release"
+
+# Library configuration:
+# This selection configures which libraries are created during the compilation process. Note
+# that in case both the static and shared library are built the static library also consists
+# of position-independent code. Note also that any change of this setting may require a clean
+# up via 'make clean'.
+#   static: Only create the static pe library (default)
+#   shared: Only create the shared pe library
+#   both  : Create both static and shared library
+LIBRARY="static"
+
+# Compiler selection:
+#   gcc  : GCC compiler (default)
+#   intel: Intel compiler
+#   clang: Clang LLVM frontend
+COMPILER="gcc"
+
+# Special preprocessor flags:
+# This setting offers the option to pass additional, specific flags to the preprocessor (e.g. "-I... -D... -include ...").
+PREPROCESSOR_FLAGS=
+
+# Special compiler flags:
+# This setting offers the option to pass additional, specific flags to the compiler (e.g. "-pg").
+COMPILER_FLAGS=
+
+# Special linker flags:
+# This setting offers the option to pass additional, specific flags to the linker when linking the examples.
+LINKER_FLAGS=
+
+# Build directory:
+# This setting specifies the directory where object files are generated. By default the build
+# directory is obj.
+BUILD_DIRECTORY=
+
+# Configuration of the boost library
+# The boost library (see www.boost.org) is precondition for the pe physics engine, i.e., it
+# is not possible to compile the engine without boost. The pe engine requires you to have
+# at least the boost version 1.36.0 or higher installed on your system. In case the boost
+# include directory is not set, it is assumed that the boost headers are installed in
+# standard paths (as for instance '/usr/include/boost'). Additionally, for the pe examples
+# it is necessary to specify the library path of the boost libraries and the name of the
+# boost thread, system, and filesystem libraries. In case the library path is not specified,
+# it is assumed that the libraries are installed in standard paths (for example '/usr/lib/').
+# If the name of a library is not specified, it is assumed that the library is called
+# 'libboost_thread.a', 'libboost_system.a', 'libboost_filesystem.a', and
+# 'libboost_boost_program_options.a', respectively.
+BOOST_INCLUDE_PATH=
+BOOST_LIBRARY_PATH=
+BOOST_THREAD_LIBRARY=
+BOOST_SYSTEM_LIBRARY=
+BOOST_FILESYSTEM_LIBRARY=
+BOOST_PROGRAM_OPTIONS_LIBRARY=
+
+# Configuration of the BLAS library
+# The pe engine offers the possibilty use a BLAS library for certain basic linear algebraic
+# operations (such as for instance matrix-matrix multiplications). If the BLAS switch is
+# set to 'yes', the engine expects the according headers and libraries in order to compile
+# properly. In case the BLAS include directory is not set, it is assumed that the header
+# file 'cblas.h' is installed in standard path (as for instance 'usr/include/cblas.h'). For
+# the compilation of the examples in the example directory it is additionally necessary to
+# specify the BLAS library directory and the name of the libraries. In case the directory
+# is not specified it is assumed that the libraries are installed in standard paths (as for
+# example 'usr/lib').
+BLAS="no"
+BLAS_INCLUDE_PATH=
+BLAS_LIBRARY_PATH=
+BLAS_LIBRARIES=
+
+# Irrlicht real-time visualization module
+# If set to 'yes' the Irrlicht module of the pe engine will be compiled. If set to 'yes'
+# and in case the Irrlicht include directory is not set, it is assumed that the Irrlicht
+# headers are installed in standard paths (for example 'usr/include/irrlicht'). For the
+# examples in the example directory it is additionally necessary to specify the Irrlicht
+# library path and the name of the Irrlicht library. In case they are not specified it
+# is assumed that the library is installed in standard paths (for example '/usr/lib')
+# and that the library is called 'libIrrlicht.a'.
+#   yes: Compilation of the Irrlicht visualization module
+#   no : Skipping the Irrlicht visualization module (default)
+IRRLICHT="no"
+IRRLICHT_INCLUDE_PATH=
+IRRLICHT_LIBRARY_PATH=
+IRRLICHT_LIBRARY=
+
+# Configuration of the MPI library
+# If set to 'yes' the MPI parallel execution of the pe physics engine will be activated. If
+# set to 'yes' and in case the MPI include directory is not explicitly specified it is assumed
+# that the MPI headers are installed in standard paths. In order to compile the pe examples in
+# the example directory it is furthermore necessary to specify the MPI library path and the
+# name of the library/libraries (e.g. "mpi mpi_cxx" for OpenMPI). If you want to enforce that
+# the mpi header file is included ahead of all other headers set MPI_PREINCLUDE to yes.
+#   yes: Activation of the MPI parallelization
+#   no : Deactivation of the MPI parallelization (default)
+MPI="no"
+MPI_INCLUDE_PATH=
+MPI_LIBRARY_PATH=
+MPI_LIBRARY=
+MPI_PREINCLUDE=
+
+# Configuration of the OpenCL support
+# If set to 'yes' the OpenCL support of the pe physics engine will be activated. If
+# set to 'yes' and in case the include directory is not explicitly specified it is assumed
+# that the OpenCL headers are installed in standard paths. In order to compile the pe examples in
+# the example directory it is furthermore necessary to specify the OpenCL library path and the
+# name of the library. OpenCL support involves a new dependency to the GPUsolve library. Unless
+# it is install to standard system paths the custom paths have to be specified. Also the absolute
+# path to the OpenCL kernel sources must be specified in order for the resulting binary to be able
+# to located the kernels at runtime.
+#   yes: Activation of the OpenCL support
+#   no : Deactivation of the OpenCL support (default)
+OPENCL="no"
+OPENCL_INCLUDE_PATH=
+OPENCL_LIBRARY_PATH=
+OPENCL_LIBRARY=
+GPUSOLVE_INCLUDE_PATH=
+GPUSOLVE_LIBRARY_PATH=
+GPUSOLVE_LIBRARY=

@@ -1,0 +1,454 @@
+//=================================================================================================
+//
+//  Parameter file for the newton's cradle example
+//
+//  Copyright (C) 2009 Klaus Iglberger
+//
+//  This file is part of pe.
+//
+//  pe is free software: you can redistribute it and/or modify it under the terms of the GNU
+//  General Public License as published by the Free Software Foundation, either version 3 of the
+//  License, or (at your option) any later version.
+//
+//  pe is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+//  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+//  General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with pe. If not,
+//  see <http://www.gnu.org/licenses/>.
+//
+//=================================================================================================
+
+
+#include "colors.inc"
+#include "glass.inc"
+#include "metals.inc"
+#include "woods.inc"
+
+
+//----- Texture declarations -----
+#declare chrome =
+texture {
+   use T_Chrome_4C
+}
+
+#declare oak =
+texture {
+   use T_Wood10
+   scale 5
+}
+
+#declare black =
+texture {
+   pigment {
+      color Black
+   }
+   finish {
+      ambient 0.1
+      diffuse 0.1
+      phong 1.0
+      phong_size 50
+      reflection 0.05
+   }
+}
+
+
+//----- POV-Ray setup -----
+
+file "./video/pic%.pov"
+
+spacing 40
+
+camera {
+   location <-40,-54,27>
+   look_at <0,0,-3>
+   sky <0,0,1>
+}
+
+light_source { <16,4,60> color rgb <0.8,0.8,0.8> }
+
+background { color White }
+
+
+//----- Material setup -----
+material {
+   name elastic
+   density 1.0
+   restitution 0.999
+   static 0.05
+   dynamic 0.05
+}
+
+
+//----- Cradle setup -----
+union {
+   id 0
+   capsule {
+      id 1
+      center <0,-20,21>
+      radius 1.0
+      length 40
+      material iron
+      texture {
+         use chrome
+      }
+   }
+   capsule {
+      id 2
+      center <0,20,21>
+      radius 1.0
+      length 40
+      material iron
+      texture {
+         use chrome
+      }
+   }
+   capsule {
+      id 3
+      center <-20,0,-9>
+      radius 1.0
+      length 40
+      material iron
+      rotate <0,0,1.570796327>
+      texture {
+         use chrome
+      }
+   }
+   capsule {
+      id 4
+      center <20,0,-9>
+      radius 1.0
+      length 40
+      material iron
+      rotate <0,0,1.570796327>
+      texture {
+         use chrome
+      }
+   }
+   capsule {
+      id 5
+      center <-20,-20,6>
+      radius 1.0
+      length 30
+      material iron
+      rotate <0,1.570796327,0>
+      texture {
+         use chrome
+      }
+   }
+   capsule {
+      id 6
+      center <-20,20,6>
+      radius 1.0
+      length 30
+      material iron
+      rotate <0,1.570796327,0>
+      texture {
+         use chrome
+      }
+   }
+   capsule {
+      id 7
+      center <20,-20,6>
+      radius 1.0
+      length 30
+      material iron
+      rotate <0,1.570796327,0>
+      texture {
+         use chrome
+      }
+   }
+   capsule {
+      id 8
+      center <20,20,6>
+      radius 1.0
+      length 30
+      material iron
+      rotate <0,1.570796327,0>
+      texture {
+         use chrome
+      }
+   }
+   box {
+      id 9
+      center <0,0,-12.5>
+      lengths <50,50,5>
+      material granite
+      texture {
+         use black
+      }
+   }
+   fixed
+}
+
+sphere {
+   id 10
+   center <-9,0,0>
+   radius 3.77976315
+   material elastic
+   linear <5,0,0>
+   texture {
+      use chrome
+   }
+}
+
+sphere {
+   id 11
+   center <-2.22023685,0,0>
+   radius 3
+   material elastic
+   texture {
+      use chrome
+   }
+}
+
+sphere {
+   id 12
+   center <3.77976315,0,0>
+   radius 3
+   material elastic
+   texture {
+      use chrome
+   }
+}
+
+sphere {
+   id 13
+   center <9.77976315,0,0>
+   radius 3
+   material elastic
+   texture {
+      use chrome
+   }
+}
+
+spring {
+   sphere 10
+   union 0
+   anchor1 <0,-3,0>
+   anchor2 <-9,-19,30.34716868>
+   stiffness 1000
+   damping 100
+}
+
+spring {
+   sphere 10
+   union 0
+   anchor1 <0,3,0>
+   anchor2 <-9,19,30.34716868>
+   stiffness 1000
+   damping 100
+}
+
+spring {
+   sphere 11
+   union 0
+   anchor1 <0,-3,0>
+   anchor2 <-2.22023685,-19,30.34716868>
+   stiffness 1000
+   damping 100
+}
+
+spring {
+   sphere 11
+   union 0
+   anchor1 <0,3,0>
+   anchor2 <-2.22023685,19,30.34716868>
+   stiffness 1000
+   damping 100
+}
+
+spring {
+   sphere 12
+   union 0
+   anchor1 <0,-3,0>
+   anchor2 <3.77976315,-19,30.34716868>
+   stiffness 1000
+   damping 100
+}
+
+spring {
+   sphere 12
+   union 0
+   anchor1 <0,3,0>
+   anchor2 <3.77976315,19,30.34716868>
+   stiffness 1000
+   damping 100
+}
+
+spring {
+   sphere 13
+   union 0
+   anchor1 <0,-3,0>
+   anchor2 <9.77976315,-19,30.34716868>
+   stiffness 1000
+   damping 100
+}
+
+spring {
+   sphere 13
+   union 0
+   anchor1 <0,3,0>
+   anchor2 <9.77976315,19,30.34716868>
+   stiffness 1000
+   damping 100
+}
+
+
+//----- Glass table -----
+
+union {
+   id 15
+   box {
+      id 16
+      center <0,72.5,-17.5>
+      lengths <150,5,5>
+      material oak
+      texture {
+         use oak
+      }
+   }
+   box {
+      id 17
+      center <0,-72.5,-17.5>
+      lengths <150,5,5>
+      material oak
+      texture {
+         use oak
+      }
+   }
+   box {
+      id 18
+      center <-72.5,0,-17.5>
+      lengths <5,140,5>
+      material oak
+      texture {
+         use oak
+      }
+   }
+   box {
+      id 19
+      center <72.5,0,-17.5>
+      lengths <5,140,5>
+      material oak
+      texture {
+         use oak
+      }
+   }
+   box {
+      id 20
+      center <-72.5,-72.5,-40>
+      lengths <5,5,40>
+      material oak
+      texture {
+         use oak
+      }
+   }
+   box {
+      id 21
+      center <72.5,-72.5,-40>
+      lengths <5,5,40>
+      material oak
+      texture {
+         use oak
+      }
+   }
+   box {
+      id 22
+      center <-72.5,72.5,-40>
+      lengths <5,5,40>
+      material oak
+      texture {
+         use oak
+      }
+   }
+   box {
+      id 23
+      center <72.5,72.5,-40>
+      lengths <5,5,40>
+      material oak
+      texture {
+         use oak
+      }
+   }
+   box {
+      id 24
+      center <0,0,-17.5>
+      lengths <140,140,5>
+      material oak
+      texture {
+         use T_Glass2
+      }
+   }
+   fixed
+}
+
+
+//----- Surroundings (floor/walls) -----
+
+plane {
+   id 25
+   normal <0,0,1>
+   displacement -60
+   material granite
+   texture {
+      pigment {
+         image_map { gif "floor.gif" map_type planar }
+         rotate <1.570796327,0,0>
+         scale 50
+      }
+   }
+}
+
+plane {
+   id 26
+   normal <0,-1,0>
+   displacement -250.01
+   material granite
+   texture {
+      pigment {
+         color White
+      }
+   }
+}
+
+plane {
+   id 27
+   normal <0,-1,0>
+   displacement -250
+   material granite
+   texture {
+      pigment {
+         image_map { gif "door.gif" map_type planar once }
+         translate <0,0,-0.31>
+         scale 200
+      }
+   }
+}
+
+plane {
+   id 28
+   normal <-1,0,0>
+   displacement -250.01
+   material granite
+   texture {
+      pigment {
+         color White
+      }
+   }
+}
+
+plane {
+   id 29
+   normal <-1,0,0>
+   displacement -250
+   material granite
+   texture {
+      pigment {
+         image_map { gif "door.gif" map_type planar once }
+         rotate <0,0,1.570796327>
+         translate <0,0,-0.31>
+         scale 200
+      }
+   }
+}

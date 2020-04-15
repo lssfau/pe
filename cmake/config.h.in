@@ -1,0 +1,59 @@
+#cmakedefine PE_SHARED_LIB_BUILD
+
+#define PE_MEDIA_PATH ${MEDIA_PATH}
+
+#define PE_OPENCL_KERNEL_PATH ${OPENCL_KERNEL_PATH}
+
+// Generic helper definitions for shared library support
+#if defined _WIN32 || defined __CYGWIN__
+  #define PE_SHARED_LIB_IMPORT __declspec(dllimport)
+  #define PE_SHARED_LIB_EXPORT __declspec(dllexport)
+  #define PE_SHARED_LIB_LOCAL
+#else
+  #if __GNUC__ >= 4
+    #define PE_SHARED_LIB_IMPORT __attribute__ ((visibility ("default")))
+    #define PE_SHARED_LIB_EXPORT __attribute__ ((visibility ("default")))
+    #define PE_SHARED_LIB_LOCAL  __attribute__ ((visibility ("hidden")))
+  #else
+    #define PE_SHARED_LIB_IMPORT
+    #define PE_SHARED_LIB_EXPORT
+    #define PE_SHARED_LIB_LOCAL
+  #endif
+#endif
+
+// Now we use the generic helper definitions above to define PE_PUBLIC, PE_PROTECTED
+// and PE_PRIVATE. PE_PUBLIC is for symbols part of the public application programming
+// interface (API), PE_PROTECTED is for symbols used e.g. by public templated or
+// inlined code. These symbols must also be publicly available when compiling the
+// application. PE_PRIVATE are symbols for internal use inside the library only.
+
+#ifdef PE_SHARED_LIB_BUILD
+   // defined if PE is compiled as a shared library
+   #ifdef PE_SHARED_LIB_SELECT_EXPORTS
+      // defined if we are building the PE SHARED_LIB (instead of using it)
+      #define PE_PUBLIC PE_SHARED_LIB_EXPORT
+   #else
+      #define PE_PUBLIC PE_SHARED_LIB_IMPORT
+   #endif
+   #define PE_PRIVATE PE_SHARED_LIB_LOCAL
+#else
+   // PE_SHARED_LIB is not defined: this means PE is a static library
+   #define PE_PUBLIC
+   #define PE_PRIVATE
+#endif
+#define PE_PROTECTED PE_PUBLIC
+
+#define PE_NOTHROW
+
+#cmakedefine01 HAVE_BLAS
+#cmakedefine01 HAVE_IRRLICHT
+#cmakedefine01 HAVE_MPI
+#cmakedefine01 HAVE_OPENCL
+
+#cmakedefine pe_PRECISION ${pe_PRECISION}
+#cmakedefine pe_COMPLEMENTARITY_SOLVER pe::solvers::${pe_COMPLEMENTARITY_SOLVER} 
+#cmakedefine pe_COARSE_COLLISION_DETECTOR pe::detection::coarse::${pe_COARSE_COLLISION_DETECTOR}
+#cmakedefine pe_FINE_COLLISION_DETECTOR pe::detection::fine::${pe_FINE_COLLISION_DETECTOR}
+#cmakedefine pe_BATCH_GENERATOR pe::batches::${pe_BATCH_GENERATOR}
+#cmakedefine pe_CONSTRAINT_SOLVER pe::response::${pe_CONSTRAINT_SOLVER}
+
